@@ -71,7 +71,7 @@ def merge_odds_with_players(players, odds_data):
                             if 'over' in outcome['name'].lower():
                                 player['O/U Odds'] = outcome['price']
                                 player['VS'] = game.get('away_team') if game.get('home_team') == player['Team'] else game.get('home_team')
-                                player['Notes'] = f"Game Total: {outcome['point']}"
+                                player['Notes'] = f"Game Total: {outcome['point']} (Updated: {TODAY})"
     return players
 
 @app.route('/mlb-stats', methods=['GET'])
@@ -90,7 +90,19 @@ def mlb_stats():
     players = get_stat_leaders(stat_type)
     odds = get_odds_data()
     enriched = merge_odds_with_players(players, odds)
+
+    # Save snapshot
+    filename = f"{category}_{TODAY}.csv"
+    filepath = os.path.join(DATA_DIR, filename)
+    keys = enriched[0].keys() if enriched else []
+    if keys:
+        with open(filepath, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=keys)
+            writer.writeheader()
+            writer.writerows(enriched)
+        print(f"Saved {filename} to {filepath}")
+
     return jsonify(enriched)
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000, host="0.0.0.0")
+    app.run(debug=True, host='0.0.0.0', port=5000)
