@@ -15,22 +15,24 @@ os.makedirs(DATA_DIR, exist_ok=True)
 def convert_to_cst(utc_time_str):
     utc_time = datetime.datetime.fromisoformat(utc_time_str.replace('Z', '+00:00'))
     cst_time = utc_time - datetime.timedelta(hours=6)
-    return cst_time.strftime('%H:%M')
+    return cst_time
 
-# MLB Stats API: Fetch all games for today
-def get_todays_games():
+# MLB Stats API: Fetch games starting after current CST time
+def get_future_games():
     url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={TODAY}&hydrate=probablePitcher"
     response = requests.get(url)
     data = response.json()
     games = []
+    now_cst = datetime.datetime.now() - datetime.timedelta(hours=0)  # CST now
     for game in data.get('dates', [])[0].get('games', []):
-        game_time_cst = convert_to_cst(game['gameDate'])
-        games.append({
-            'gamePk': game['gamePk'],
-            'home': game['teams']['home']['team']['name'],
-            'away': game['teams']['away']['team']['name'],
-            'time_cst': game_time_cst
-        })
+        game_time = convert_to_cst(game['gameDate'])
+        if game_time > now_cst:
+            games.append({
+                'gamePk': game['gamePk'],
+                'home': game['teams']['home']['team']['name'],
+                'away': game['teams']['away']['team']['name'],
+                'time_cst': game_time.strftime('%H:%M')
+            })
     return games
 
 # Get OBP for a player by ID
@@ -44,9 +46,9 @@ def get_player_obp(player_id):
     except:
         return 0.0
 
-# Build OBP leaderboard for players in today's games
-def get_todays_game_obp_leaders(limit=10):
-    games = get_todays_games()
+# Build OBP leaderboard for players in future games
+def get_future_game_obp_leaders(limit=10):
+    games = get_future_games()
     players = []
     for game in games:
         box_url = f"https://statsapi.mlb.com/api/v1.1/game/{game['gamePk']}/boxscore"
@@ -65,14 +67,14 @@ def get_todays_game_obp_leaders(limit=10):
                         "VS": game['away'] if side == 'home' else game['home'],
                         "Game Time (CST)": game['time_cst'],
                         "O/U Odds": "-",
-                        "Notes": "Playing today"
+                        "Notes": "Playing later today"
                     })
     sorted_players = sorted(players, key=lambda x: x['Stat'], reverse=True)
     return sorted_players[:limit]
 
-@app.route('/mlb-obp-today', methods=['GET'])
-def mlb_obp_today():
-    players = get_todays_game_obp_leaders()
+@app.route('/mlb-obp-late', methods=['GET'])
+def mlb_obp_late():
+    players = get_future_game_obp_leaders()
     return jsonify(players)
 
 if __name__ == '__main__':
