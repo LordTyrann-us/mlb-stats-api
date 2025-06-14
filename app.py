@@ -15,7 +15,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 def convert_to_cst(utc_time_str):
     utc_time = datetime.datetime.fromisoformat(utc_time_str.replace('Z', '+00:00'))
     cst_time = utc_time - datetime.timedelta(hours=6)
-    return cst_time
+    return cst_time.replace(tzinfo=datetime.timezone.utc).astimezone(datetime.timezone(datetime.timedelta(hours=-6)))
 
 # MLB Stats API: Fetch all games for today
 def get_all_games():
@@ -51,7 +51,8 @@ def get_future_game_obp_leaders(limit=10):
     now_cst = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-6)))
     players = []
     for game in games:
-        if game['datetime_obj'].replace(tzinfo=None) < now_cst.replace(tzinfo=None):
+        game_time = game['datetime_obj']
+        if game_time < now_cst:
             continue  # Skip games already mostly completed
         box_url = f"https://statsapi.mlb.com/api/v1.1/game/{game['gamePk']}/boxscore"
         response = requests.get(box_url)
