@@ -15,7 +15,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 def convert_to_cst(utc_time_str):
     utc_time = datetime.datetime.fromisoformat(utc_time_str.replace('Z', '+00:00'))
     cst_time = utc_time - datetime.timedelta(hours=6)
-    return cst_time
+    return cst_time.replace(tzinfo=None)
 
 # MLB Stats API: Fetch games starting after current CST time
 def get_future_games():
@@ -23,7 +23,7 @@ def get_future_games():
     response = requests.get(url)
     data = response.json()
     games = []
-    now_cst = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=6)  # CST now, offset-aware
+    now_cst = datetime.datetime.utcnow() - datetime.timedelta(hours=6)  # naive CST now
     for game in data.get('dates', [])[0].get('games', []):
         game_time = convert_to_cst(game['gameDate'])
         if game_time > now_cst:
