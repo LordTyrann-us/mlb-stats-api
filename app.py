@@ -23,7 +23,7 @@ def get_future_games():
     response = requests.get(url)
     data = response.json()
     games = []
-    now_cst = datetime.datetime.now() - datetime.timedelta(hours=0)  # CST now
+    now_cst = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=6)  # CST now, offset-aware
     for game in data.get('dates', [])[0].get('games', []):
         game_time = convert_to_cst(game['gameDate'])
         if game_time > now_cst:
