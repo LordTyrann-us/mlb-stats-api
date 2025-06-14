@@ -54,8 +54,12 @@ def get_future_game_obp_leaders(limit=10):
         box_url = f"https://statsapi.mlb.com/api/v1.1/game/{game['gamePk']}/boxscore"
         response = requests.get(box_url)
         box = response.json()
+        if 'teams' not in box:
+            continue  # Skip if no team data is available
         for side in ['home', 'away']:
-            for player_data in box['teams'][side]['players'].values():
+            if side not in box['teams']:
+                continue
+            for player_data in box['teams'][side].get('players', {}).values():
                 person = player_data.get('person', {})
                 if player_data.get('position', {}).get('code') != '1':  # Exclude pitchers
                     obp = get_player_obp(person['id'])
