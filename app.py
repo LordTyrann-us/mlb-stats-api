@@ -15,7 +15,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 def convert_to_cst(utc_time_str):
     utc_time = datetime.datetime.fromisoformat(utc_time_str.replace('Z', '+00:00'))
     cst_time = utc_time - datetime.timedelta(hours=6)
-    return cst_time.replace(tzinfo=datetime.timezone.utc).astimezone(datetime.timezone(datetime.timedelta(hours=-6)))
+    return cst_time.replace(tzinfo=None)
 
 # MLB Stats API: Fetch all games for today
 def get_all_games():
@@ -46,9 +46,9 @@ def get_player_obp(player_id):
         return 0.0
 
 # Build OBP leaderboard for players in all today's games
-def get_future_game_obp_leaders(limit=10):
+def get_remaining_game_obp_leaders(limit=10):
     games = get_all_games()
-    now_cst = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-6)))
+    now_cst = datetime.datetime.now() - datetime.timedelta(hours=6)
     players = []
     for game in games:
         game_time = game['datetime_obj']
@@ -79,9 +79,9 @@ def get_future_game_obp_leaders(limit=10):
     sorted_players = sorted(players, key=lambda x: x['Stat'], reverse=True)
     return sorted_players[:limit]
 
-@app.route('/mlb-obp-late', methods=['GET'])
-def mlb_obp_late():
-    players = get_future_game_obp_leaders()
+@app.route('/mlb-obp-remaining', methods=['GET'])
+def mlb_obp_remaining():
+    players = get_remaining_game_obp_leaders()
     return jsonify(players)
 
 if __name__ == '__main__':
