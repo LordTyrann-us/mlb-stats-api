@@ -46,7 +46,7 @@ def get_player_obp(player_id):
     except:
         return 0.0
 
-# Build OBP leaderboard for players in all today's games
+# Fetch roster and build OBP leaderboard
 def get_remaining_game_obp_leaders(limit=10):
     games = get_all_games()
     now_cst = datetime.datetime.now() - datetime.timedelta(hours=6)
@@ -56,29 +56,33 @@ def get_remaining_game_obp_leaders(limit=10):
         game_time = game['datetime_obj']
         print(f"Checking game at {game_time} vs now {now_cst}")
         if game_time < now_cst:
-            continue  # Skip games already mostly completed
-        box_url = f"https://statsapi.mlb.com/api/v1.1/game/{game['gamePk']}/boxscore"
-        response = requests.get(box_url)
-        box = response.json()
-        if 'teams' not in box:
-            print(f"No 'teams' key in boxscore for game {game['gamePk']}")
             continue
-        for side in ['home', 'away']:
-            if side not in box['teams']:
+        for team_side in ['home', 'away']:
+            team_name = game[team_side]
+            team_url = f"https://statsapi.mlb.com/api/v1/teams?sportId=1"
+            teams_data = requests.get(team_url).json()
+            team_id = None
+            for t in teams_data['teams']:
+                if t['name'] == team_name:
+                    team_id = t['id']
+                    break
+            if not team_id:
                 continue
-            for player_data in box['teams'][side].get('players', {}).values():
-                person = player_data.get('person', {})
-                if player_data.get('position', {}).get('code') != '1':  # Exclude pitchers
-                    obp = get_player_obp(person['id'])
+            roster_url = f"https://statsapi.mlb.com/api/v1/teams/{team_id}/roster"
+            roster_data = requests.get(roster_url).json()
+            for player in roster_data.get('roster', []):
+                if player['position']['code'] != '1':
+                    player_id = player['person']['id']
+                    obp = get_player_obp(player_id)
                     players.append({
-                        "Name": person['fullName'],
-                        "Team": game[side],
+                        "Name": player['person']['fullName'],
+                        "Team": team_name,
                         "Stat": obp,
                         "Day": TODAY,
-                        "VS": game['away'] if side == 'home' else game['home'],
-                        "Game Time (CST)": game['datetime_obj'].strftime('%H:%M'),
+                        "VS": game['away'] if team_side == 'home' else game['home'],
+                        "Game Time (CST)": game_time.strftime('%H:%M'),
                         "O/U Odds": "-",
-                        "Notes": "Playing later today"
+                        "Notes": "Expected to play"
                     })
     sorted_players = sorted(players, key=lambda x: x['Stat'], reverse=True)
     return sorted_players[:limit]
