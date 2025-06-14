@@ -48,10 +48,10 @@ def get_player_obp(player_id):
 # Build OBP leaderboard for players in all today's games
 def get_future_game_obp_leaders(limit=10):
     games = get_all_games()
-    now_cst = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
+    now_cst = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-6)))
     players = []
     for game in games:
-        if game['datetime_obj'] < now_cst:
+        if game['datetime_obj'].replace(tzinfo=None) < now_cst.replace(tzinfo=None):
             continue  # Skip games already mostly completed
         box_url = f"https://statsapi.mlb.com/api/v1.1/game/{game['gamePk']}/boxscore"
         response = requests.get(box_url)
