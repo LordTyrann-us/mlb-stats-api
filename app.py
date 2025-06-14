@@ -11,6 +11,8 @@ TODAY = datetime.datetime.now().strftime('%Y-%m-%d')
 DATA_DIR = os.path.expanduser("~/Box/MLB_Stats_Snapshots")
 os.makedirs(DATA_DIR, exist_ok=True)
 
+ODDS_API_KEY = '803756147f1055030d8f479b0000351c'
+
 # Convert UTC time to CST (no daylight saving)
 def convert_to_cst(utc_time_str):
     utc_time = datetime.datetime.fromisoformat(utc_time_str.replace('Z', '+00:00'))
@@ -47,6 +49,26 @@ def get_player_stat(player_id, stat_type='homeRuns'):
     except:
         return 0
 
+# Fetch betting odds
+
+def get_odds(player_name, market_type='HR'):
+    url = f"https://api.the-odds-api.com/v4/sports/baseball_mlb/odds?regions=us&markets=player_props&apiKey={ODDS_API_KEY}"
+    response = requests.get(url)
+    if response.status_code != 200:
+        return "-"
+    try:
+        odds_data = response.json()
+        for game in odds_data:
+            for bookmaker in game.get('bookmakers', []):
+                for market in bookmaker.get('markets', []):
+                    if market['key'] == 'player_home_runs':
+                        for outcome in market.get('outcomes', []):
+                            if player_name.lower() in outcome['name'].lower():
+                                return f"O{outcome.get('line', '?')} {outcome.get('price', '')}"
+    except:
+        return "-"
+    return "-"
+
 # Fetch OBP leaders for remaining games
 def get_remaining_game_obp_leaders(limit=10):
     games = get_all_games()
@@ -69,15 +91,16 @@ def get_remaining_game_obp_leaders(limit=10):
             for player in roster_data.get('roster', []):
                 if player['position']['code'] != '1':
                     player_id = player['person']['id']
+                    name = player['person']['fullName']
                     obp = get_player_stat(player_id, 'onBasePercentage')
                     players.append({
-                        "Name": player['person']['fullName'],
+                        "Name": name,
                         "Team": team_name,
                         "Stat": obp,
                         "Day": TODAY,
                         "VS": game['away'] if team_side == 'home' else game['home'],
                         "Game Time (CST)": game_time.strftime('%H:%M'),
-                        "O/U Odds": "-",
+                        "O/U Odds": get_odds(name, market_type='OBP'),
                         "Notes": "Expected to play"
                     })
     sorted_players = sorted(players, key=lambda x: x['Stat'], reverse=True)
@@ -105,15 +128,16 @@ def get_remaining_game_hr_leaders(limit=10):
             for player in roster_data.get('roster', []):
                 if player['position']['code'] != '1':
                     player_id = player['person']['id']
+                    name = player['person']['fullName']
                     hr = get_player_stat(player_id, 'homeRuns')
                     players.append({
-                        "Name": player['person']['fullName'],
+                        "Name": name,
                         "Team": team_name,
                         "Stat": hr,
                         "Day": TODAY,
                         "VS": game['away'] if team_side == 'home' else game['home'],
                         "Game Time (CST)": game_time.strftime('%H:%M'),
-                        "O/U Odds": "-",
+                        "O/U Odds": get_odds(name, market_type='HR'),
                         "Notes": "Expected to play"
                     })
     sorted_players = sorted(players, key=lambda x: x['Stat'], reverse=True)
@@ -148,11 +172,18 @@ def mlb_k_leaders():
                     "VS": game['away'] if team == 'home' else game['home'],
                     "Game Time (CST)": game['datetime_obj'].strftime('%H:%M'),
                     "Strikeouts": "TBD",
-                    "O/U Odds": "TBD",
+                    "O/U Odds": get_odds(pitcher_name, market_type='K'),
                     "HRs Allowed": "TBD",
                     "Notes": "Probable starter"
                 })
     return jsonify(pitchers)
+
+@app.route('/test-odds-api', methods=['GET'])
+def test_odds_api():
+    test_name = request.args.get('player', 'Aaron Judge')
+    market_type = request.args.get('market', 'HR')
+    odds = get_odds(test_name, market_type)
+    return jsonify({"Player": test_name, "Market": market_type, "Odds": odds})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
