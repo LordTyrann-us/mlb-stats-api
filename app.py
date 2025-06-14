@@ -15,12 +15,9 @@ os.makedirs(DATA_DIR, exist_ok=True)
 def convert_to_cst(utc_time_str):
     utc_time = datetime.datetime.fromisoformat(utc_time_str.replace('Z', '+00:00'))
     cst_time = utc_time - datetime.timedelta(hours=6)
-    return cst_time.replace(tzinfo=None)
+    return cst_time
 
 # MLB Stats API: Fetch all games for today
-# Include all games, even those already started
-# Future-proof for when current time is after all games
-
 def get_all_games():
     url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={TODAY}&hydrate=probablePitcher"
     response = requests.get(url)
@@ -32,7 +29,8 @@ def get_all_games():
             'gamePk': game['gamePk'],
             'home': game['teams']['home']['team']['name'],
             'away': game['teams']['away']['team']['name'],
-            'time_cst': game_time.strftime('%H:%M')
+            'time_cst': game_time.strftime('%Y-%m-%d %H:%M'),
+            'datetime_obj': game_time
         })
     return games
 
@@ -53,8 +51,7 @@ def get_future_game_obp_leaders(limit=10):
     now_cst = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
     players = []
     for game in games:
-        game_time = datetime.datetime.strptime(game['time_cst'], '%H:%M')
-        if game_time.time() < now_cst.time():
+        if game['datetime_obj'] < now_cst:
             continue  # Skip games already mostly completed
         box_url = f"https://statsapi.mlb.com/api/v1.1/game/{game['gamePk']}/boxscore"
         response = requests.get(box_url)
@@ -74,7 +71,7 @@ def get_future_game_obp_leaders(limit=10):
                         "Stat": obp,
                         "Day": TODAY,
                         "VS": game['away'] if side == 'home' else game['home'],
-                        "Game Time (CST)": game['time_cst'],
+                        "Game Time (CST)": game['datetime_obj'].strftime('%H:%M'),
                         "O/U Odds": "-",
                         "Notes": "Playing later today"
                     })
