@@ -32,6 +32,7 @@ def get_all_games():
             'time_cst': game_time.strftime('%Y-%m-%d %H:%M'),
             'datetime_obj': game_time
         })
+    print(f"Fetched {len(games)} games")
     return games
 
 # Get OBP for a player by ID
@@ -49,15 +50,18 @@ def get_player_obp(player_id):
 def get_remaining_game_obp_leaders(limit=10):
     games = get_all_games()
     now_cst = datetime.datetime.now() - datetime.timedelta(hours=6)
+    now_cst = now_cst.replace(tzinfo=None)
     players = []
     for game in games:
         game_time = game['datetime_obj']
+        print(f"Checking game at {game_time} vs now {now_cst}")
         if game_time < now_cst:
             continue  # Skip games already mostly completed
         box_url = f"https://statsapi.mlb.com/api/v1.1/game/{game['gamePk']}/boxscore"
         response = requests.get(box_url)
         box = response.json()
         if 'teams' not in box:
+            print(f"No 'teams' key in boxscore for game {game['gamePk']}")
             continue
         for side in ['home', 'away']:
             if side not in box['teams']:
