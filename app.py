@@ -30,23 +30,24 @@ def get_all_games():
             'home': game['teams']['home']['team']['name'],
             'away': game['teams']['away']['team']['name'],
             'time_cst': game_time.strftime('%Y-%m-%d %H:%M'),
-            'datetime_obj': game_time
+            'datetime_obj': game_time,
+            'probablePitchers': game['teams'].get('home', {}).get('probablePitcher', {}).get('fullName', '') + ' vs ' + game['teams'].get('away', {}).get('probablePitcher', {}).get('fullName', '')
         })
     print(f"Fetched {len(games)} games")
     return games
 
-# Get OBP for a player by ID
-def get_player_obp(player_id):
+# Get player stats (generic)
+def get_player_stat(player_id, stat_type='homeRuns'):
     url = f"https://statsapi.mlb.com/api/v1/people/{player_id}/stats?stats=season&season=2024"
     response = requests.get(url)
     stats = response.json()
     try:
         splits = stats['stats'][0]['splits'][0]['stat']
-        return float(splits.get('onBasePercentage', 0))
+        return float(splits.get(stat_type, 0))
     except:
-        return 0.0
+        return 0
 
-# Fetch roster and build OBP leaderboard
+# Fetch OBP leaders for remaining games
 def get_remaining_game_obp_leaders(limit=10):
     games = get_all_games()
     now_cst = datetime.datetime.now() - datetime.timedelta(hours=6)
@@ -54,18 +55,13 @@ def get_remaining_game_obp_leaders(limit=10):
     players = []
     for game in games:
         game_time = game['datetime_obj']
-        print(f"Checking game at {game_time} vs now {now_cst}")
         if game_time < now_cst:
             continue
         for team_side in ['home', 'away']:
             team_name = game[team_side]
             team_url = f"https://statsapi.mlb.com/api/v1/teams?sportId=1"
             teams_data = requests.get(team_url).json()
-            team_id = None
-            for t in teams_data['teams']:
-                if t['name'] == team_name:
-                    team_id = t['id']
-                    break
+            team_id = next((t['id'] for t in teams_data['teams'] if t['name'] == team_name), None)
             if not team_id:
                 continue
             roster_url = f"https://statsapi.mlb.com/api/v1/teams/{team_id}/roster"
@@ -73,7 +69,7 @@ def get_remaining_game_obp_leaders(limit=10):
             for player in roster_data.get('roster', []):
                 if player['position']['code'] != '1':
                     player_id = player['person']['id']
-                    obp = get_player_obp(player_id)
+                    obp = get_player_stat(player_id, 'onBasePercentage')
                     players.append({
                         "Name": player['person']['fullName'],
                         "Team": team_name,
@@ -87,10 +83,76 @@ def get_remaining_game_obp_leaders(limit=10):
     sorted_players = sorted(players, key=lambda x: x['Stat'], reverse=True)
     return sorted_players[:limit]
 
+# Fetch HR leaders
+def get_remaining_game_hr_leaders(limit=10):
+    games = get_all_games()
+    now_cst = datetime.datetime.now() - datetime.timedelta(hours=6)
+    now_cst = now_cst.replace(tzinfo=None)
+    players = []
+    for game in games:
+        game_time = game['datetime_obj']
+        if game_time < now_cst:
+            continue
+        for team_side in ['home', 'away']:
+            team_name = game[team_side]
+            team_url = f"https://statsapi.mlb.com/api/v1/teams?sportId=1"
+            teams_data = requests.get(team_url).json()
+            team_id = next((t['id'] for t in teams_data['teams'] if t['name'] == team_name), None)
+            if not team_id:
+                continue
+            roster_url = f"https://statsapi.mlb.com/api/v1/teams/{team_id}/roster"
+            roster_data = requests.get(roster_url).json()
+            for player in roster_data.get('roster', []):
+                if player['position']['code'] != '1':
+                    player_id = player['person']['id']
+                    hr = get_player_stat(player_id, 'homeRuns')
+                    players.append({
+                        "Name": player['person']['fullName'],
+                        "Team": team_name,
+                        "Stat": hr,
+                        "Day": TODAY,
+                        "VS": game['away'] if team_side == 'home' else game['home'],
+                        "Game Time (CST)": game_time.strftime('%H:%M'),
+                        "O/U Odds": "-",
+                        "Notes": "Expected to play"
+                    })
+    sorted_players = sorted(players, key=lambda x: x['Stat'], reverse=True)
+    return sorted_players[:limit]
+
 @app.route('/mlb-obp-remaining', methods=['GET'])
 def mlb_obp_remaining():
     players = get_remaining_game_obp_leaders()
     return jsonify(players)
+
+@app.route('/mlb-hr-remaining', methods=['GET'])
+def mlb_hr_remaining():
+    players = get_remaining_game_hr_leaders()
+    return jsonify(players)
+
+@app.route('/mlb-k-leaders', methods=['GET'])
+def mlb_k_leaders():
+    games = get_all_games()
+    now_cst = datetime.datetime.now() - datetime.timedelta(hours=6)
+    now_cst = now_cst.replace(tzinfo=None)
+    pitchers = []
+    for game in games:
+        if game['datetime_obj'] < now_cst:
+            continue
+        for team in ['home', 'away']:
+            pitcher_name = game['probablePitchers'].split(' vs ')[0 if team == 'home' else 1]
+            if pitcher_name and pitcher_name != 'None':
+                pitchers.append({
+                    "Name": pitcher_name,
+                    "Team": game[team],
+                    "Day": TODAY,
+                    "VS": game['away'] if team == 'home' else game['home'],
+                    "Game Time (CST)": game['datetime_obj'].strftime('%H:%M'),
+                    "Strikeouts": "TBD",
+                    "O/U Odds": "TBD",
+                    "HRs Allowed": "TBD",
+                    "Notes": "Probable starter"
+                })
+    return jsonify(pitchers)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
