@@ -50,7 +50,6 @@ def get_player_stat(player_id, stat_type='homeRuns'):
         return 0
 
 # Fetch betting odds
-
 def get_odds(player_name, market_type='HR'):
     url = f"https://api.the-odds-api.com/v4/sports/baseball_mlb/odds?regions=us&markets=player_props&apiKey={ODDS_API_KEY}"
     response = requests.get(url)
@@ -61,7 +60,15 @@ def get_odds(player_name, market_type='HR'):
         for game in odds_data:
             for bookmaker in game.get('bookmakers', []):
                 for market in bookmaker.get('markets', []):
-                    if market['key'] == 'player_home_runs':
+                    if market_type == 'HR' and market['key'] == 'player_home_runs':
+                        for outcome in market.get('outcomes', []):
+                            if player_name.lower() in outcome['name'].lower():
+                                return f"O{outcome.get('line', '?')} {outcome.get('price', '')}"
+                    elif market_type == 'OBP' and market['key'] == 'player_total_bases':
+                        for outcome in market.get('outcomes', []):
+                            if player_name.lower() in outcome['name'].lower() and outcome.get('line') == 1:
+                                return f"O1.0 {outcome.get('price', '')}"
+                    elif market_type == 'K' and market['key'] == 'player_strikeouts':
                         for outcome in market.get('outcomes', []):
                             if player_name.lower() in outcome['name'].lower():
                                 return f"O{outcome.get('line', '?')} {outcome.get('price', '')}"
