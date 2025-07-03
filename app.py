@@ -81,16 +81,61 @@ def fetch_mlb_stats():
     if not category:
         return jsonify({"error": "Category query parameter is required."}), 400
 
-    if category == 'sluggers':
-        return jsonify([])  # Slugger logic here
-    elif category == 'strikeouts':
-        return jsonify([])  # Pitcher K logic here
-    elif category == 'obp':
-        return jsonify([])  # OBP logic here
-    elif category == 'hr_allowed':
-        return jsonify([])  # HR allowed logic here
-    else:
-        return jsonify({"error": "Invalid category specified."}), 400
+    now_cst = datetime.datetime.now() - datetime.timedelta(hours=6)
+    now_cst = now_cst.replace(tzinfo=None)
+    games = get_all_games()
+    results = []
+
+    for game in games:
+        if game['datetime_obj'] < now_cst:
+            continue
+        if category in ['sluggers', 'obp']:
+            for team_side in ['home', 'away']:
+                team_name = game[team_side]
+                team_url = f"https://statsapi.mlb.com/api/v1/teams?sportId=1"
+                teams_data = requests.get(team_url).json()
+                team_id = next((t['id'] for t in teams_data['teams'] if t['name'] == team_name), None)
+                if not team_id:
+                    continue
+                roster_url = f"https://statsapi.mlb.com/api/v1/teams/{team_id}/roster"
+                roster_data = requests.get(roster_url).json()
+                for player in roster_data.get('roster', []):
+                    if player['position']['code'] != '1':
+                        player_id = player['person']['id']
+                        name = player['person']['fullName']
+                        stat_type = 'homeRuns' if category == 'sluggers' else 'onBasePercentage'
+                        stat_value = get_player_stat(player_id, stat_type)
+                        market_type = 'HR' if category == 'sluggers' else 'OBP'
+                        results.append({
+                            "Name": name,
+                            "Team": team_name,
+                            "Stat": stat_value,
+                            "Day": TODAY,
+                            "VS": game['away'] if team_side == 'home' else game['home'],
+                            "Game Time (CST)": game['datetime_obj'].strftime('%H:%M'),
+                            "O/U Odds": get_odds(name, market_type=market_type),
+                            "Notes": "Expected to play"
+                        })
+        elif category == 'strikeouts':
+            for team in ['home', 'away']:
+                pitcher_name = game['probablePitchers'].split(' vs ')[0 if team == 'home' else 1]
+                if pitcher_name and pitcher_name != 'None':
+                    results.append({
+                        "Name": pitcher_name,
+                        "Team": game[team],
+                        "Day": TODAY,
+                        "VS": game['away'] if team == 'home' else game['home'],
+                        "Game Time (CST)": game['datetime_obj'].strftime('%H:%M'),
+                        "Strikeouts": "TBD",
+                        "O/U Odds": get_odds(pitcher_name, market_type='K'),
+                        "HRs Allowed": "TBD",
+                        "Notes": "Probable starter"
+                    })
+        elif category == 'hr_allowed':
+            return jsonify([])  # Placeholder for future HR allowed logic
+
+    sorted_results = sorted(results, key=lambda x: x.get('Stat', 0), reverse=True)[:10] if category in ['sluggers', 'obp'] else results
+    return jsonify(sorted_results)
 
 @app.errorhandler(404)
 def not_found(e):
